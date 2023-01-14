@@ -10,6 +10,8 @@ import {
 import { ArrowRight } from 'phosphor-react'
 import { Controller, useFieldArray, useForm } from 'react-hook-form'
 import { z } from 'zod'
+import { api } from '../../../lib/axios'
+import { convertTimeStringInMinutes } from '../../../utils/convert-time-string-to-minutes'
 import { getWeekDays } from '../../../utils/get-week-days'
 import { Container, FormError, Header } from '../styles'
 import {
@@ -34,10 +36,29 @@ const timeIntervalsFormSchema = z.object({
     .transform((intervals) => intervals.filter((interval) => interval.enabled))
     .refine((intervals) => intervals.length > 0, {
       message: 'You need to pick at least one day of the week!',
-    }),
+    })
+    .transform((intervals) => {
+      return intervals.map((interval) => {
+        return {
+          weekDay: interval.weekDay,
+          startTimeInMinutes: convertTimeStringInMinutes(interval.startTime),
+          endTimeInMinutes: convertTimeStringInMinutes(interval.endTime),
+        }
+      })
+    })
+    .refine(
+      (intervals) => {
+        return intervals.every(
+          (interval) =>
+            interval.endTimeInMinutes - 60 >= interval.startTimeInMinutes,
+        )
+      },
+      { message: 'Daily time needs to be at least 1 hour' },
+    ),
 })
 
-type timeIntervalsFormData = z.infer<typeof timeIntervalsFormSchema>
+type timeIntervalsFormInput = z.input<typeof timeIntervalsFormSchema>
+type timeIntervalsFormOutput = z.output<typeof timeIntervalsFormSchema>
 
 export default function TimeIntervals() {
   const {
@@ -46,7 +67,7 @@ export default function TimeIntervals() {
     control,
     watch,
     formState: { isSubmitting, errors },
-  } = useForm({
+  } = useForm<timeIntervalsFormInput>({
     resolver: zodResolver(timeIntervalsFormSchema),
     defaultValues: {
       intervals: [
@@ -70,8 +91,12 @@ export default function TimeIntervals() {
 
   const intervals = watch('intervals')
 
-  async function handleSetTimeIntervals(data: timeIntervalsFormData) {
-    console.log(data)
+  async function handleSetTimeIntervals(data: any) {
+    const { intervals } = data as timeIntervalsFormOutput
+
+    await api.post('/users/time-intervals', {
+      intervals,
+    })
   }
 
   return (
